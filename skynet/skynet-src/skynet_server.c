@@ -68,7 +68,7 @@ struct skynet_node {
 	pthread_key_t handle_key;
 	bool profile;	// default is off
 };
-
+//线程上下文？
 static struct skynet_node G_NODE;
 
 int 
@@ -85,9 +85,11 @@ static void
 context_dec() {
 	ATOM_FDEC(&G_NODE.total);
 }
-
+/*
+线程局部数据
+*/
 uint32_t 
-skynet_current_handle(void) {
+skynet_current_handle(void) {//获取线程id
 	if (G_NODE.init) {
 		void * handle = pthread_getspecific(G_NODE.handle_key);
 		return (uint32_t)(uintptr_t)handle;

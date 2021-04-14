@@ -38,7 +38,7 @@ static struct mem_data mem_stats[SLOT_SIZE];
 
 #ifndef NOUSE_JEMALLOC
 
-#include "jemalloc.h"
+#include "jemalloc.h"//JeMalloc分配器
 
 // for skynet_lalloc use
 #define raw_realloc je_realloc
@@ -184,7 +184,7 @@ mallctl_opt(const char* name, int* newval) {
 void *
 skynet_malloc(size_t size) {
 	void* ptr = je_malloc(size + PREFIX_SIZE);
-	if(!ptr) malloc_oom(size);
+	if(!ptr) malloc_oom(size);//没申请到就错误处理，就是报错
 	return fill_prefix(ptr);
 }
 
@@ -296,7 +296,7 @@ dump_c_mem() {
 	skynet_error(NULL, "+total: %zdkb",total >> 10);
 }
 
-char *//把字符串拷贝一份，拷贝到内存池（skynet_malloc）中。
+char *//把字符串拷贝一份
 skynet_strdup(const char *str) {
 	size_t sz = strlen(str);
 	char * ret = skynet_malloc(sz+1);
@@ -304,7 +304,7 @@ skynet_strdup(const char *str) {
 	return ret;
 }
 
-void *
+void *//申请nsize大小的一块内存。
 skynet_lalloc(void *ptr, size_t osize, size_t nsize) {
 	if (nsize == 0) {
 		raw_free(ptr);
