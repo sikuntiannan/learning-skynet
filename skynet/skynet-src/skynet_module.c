@@ -74,14 +74,14 @@ _query(const char * name) {//找到这个名字的动态库。
 }
 
 static void *
-get_api(struct skynet_module *mod, const char *api_name) {
+get_api(struct skynet_module *mod, const char *api_name) {//符号名是模块名+符号名，定义了模块内符号命名。
 	size_t name_size = strlen(mod->name);
 	size_t api_size = strlen(api_name);
 	char tmp[name_size + api_size + 1];
 	memcpy(tmp, mod->name, name_size);
 	memcpy(tmp+name_size, api_name, api_size+1);
 	char *ptr = strrchr(tmp, '.');
-	if (ptr == NULL) {
+	if (ptr == NULL) {//这个功能就没看懂为什么。
 		ptr = tmp;
 	} else {
 		ptr = ptr + 1;
