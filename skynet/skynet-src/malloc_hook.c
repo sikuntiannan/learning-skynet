@@ -296,7 +296,7 @@ dump_c_mem() {
 	skynet_error(NULL, "+total: %zdkb",total >> 10);
 }
 
-char *
+char *//把字符串拷贝一份，拷贝到内存池（skynet_malloc）中。
 skynet_strdup(const char *str) {
 	size_t sz = strlen(str);
 	char * ret = skynet_malloc(sz+1);

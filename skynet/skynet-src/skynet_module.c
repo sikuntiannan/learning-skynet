@@ -62,8 +62,8 @@ _try_open(struct modules *m, const char * name) {
 	return dl;
 }
 
-static struct skynet_module * 
-_query(const char * name) {//找到这个名字的动态库。
+static struct skynet_module * //找到这个名字的动态库。
+_query(const char * name) {
 	int i;
 	for (i=0;i<M->count;i++) {
 		if (strcmp(M->m[i].name,name)==0) {
@@ -89,7 +89,7 @@ get_api(struct skynet_module *mod, const char *api_name) {//符号名是模块�
 	return dlsym(mod->module, ptr);//根据动态库的句柄和符号，返回符号对应的地址。不仅仅用于获取函数，还可以是变量。
 }
 
-static int
+static int//初始化模块
 open_sym(struct skynet_module *mod) {
 	mod->create = get_api(mod, "_create");
 	mod->init = get_api(mod, "_init");
@@ -102,22 +102,22 @@ open_sym(struct skynet_module *mod) {
 struct skynet_module * 
 skynet_module_query(const char * name) {//查询，有就返回，无就加载。
 	struct skynet_module * result = _query(name);
-	if (result)
+	if (result)//判断是否找到了
 		return result;
 
-	SPIN_LOCK(M)
+	SPIN_LOCK(M)//加锁。这里可以粒度更小。
 
-	result = _query(name); // double check
+	result = _query(name); // double check；防止在验证后加锁前被释放了
 
 	if (result == NULL && M->count < MAX_MODULE_TYPE) {
-		int index = M->count;
-		void * dl = _try_open(M,name);
+		int index = M->count;//这个创建可以省，但没必要，因为不创建就要多次索址。创引用和创变量没什么差别。
+		void * dl = _try_open(M,name);//尝试加载
 		if (dl) {
-			M->m[index].name = name;
+			M->m[index].name = name;//这里name有可能之后就没了，所以下面重新new一份出来。同理这里返回值还是空。计数器没更新。但下面的函数调用要用这两个值，所以就先赋值了。
 			M->m[index].module = dl;
 
 			if (open_sym(&M->m[index]) == 0) {
-				M->m[index].name = skynet_strdup(name);
+				M->m[index].name = skynet_strdup(name);//重新给名字
 				M->count ++;
 				result = &M->m[index];
 			}
@@ -131,10 +131,10 @@ skynet_module_query(const char * name) {//查询，有就返回，无就加载�
 
 void 
 skynet_module_insert(struct skynet_module *mod) {
-	SPIN_LOCK(M)
+	SPIN_LOCK(M)//c的封装没有C++好，关于M的使用使用私有静态成员来实现外面就没有锁的代码了。
 
 	struct skynet_module * m = _query(mod->name);
-	assert(m == NULL && M->count < MAX_MODULE_TYPE);
+	assert(m == NULL && M->count < MAX_MODULE_TYPE);//要求没有找到，断言会引起终止，依赖debug模式。打印错误信息。
 	int index = M->count;
 	M->m[index] = *mod;
 	++M->count;
@@ -142,7 +142,7 @@ skynet_module_insert(struct skynet_module *mod) {
 	SPIN_UNLOCK(M)
 }
 
-void * 
+void * //调用模块自己的创建函数。
 skynet_module_instance_create(struct skynet_module *m) {
 	if (m->create) {
 		return m->create();
@@ -151,7 +151,7 @@ skynet_module_instance_create(struct skynet_module *m) {
 	}
 }
 
-int
+int//调用模块自己的初始化函数。
 skynet_module_instance_init(struct skynet_module *m, void * inst, struct skynet_context *ctx, const char * parm) {
 	return m->init(inst, ctx, parm);
 }
@@ -171,7 +171,7 @@ skynet_module_instance_signal(struct skynet_module *m, void *inst, int signal) {
 }
 
 void 
-skynet_module_init(const char *path) {
+skynet_module_init(const char *path) {//初始化模块的管理者。
 	struct modules *m = skynet_malloc(sizeof(*m));
 	m->count = 0;
 	m->path = skynet_strdup(path);
