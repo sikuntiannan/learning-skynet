@@ -15,22 +15,22 @@
 #define MEMORY_ALLOCTAG 0x20140605
 #define MEMORY_FREETAG 0x0badf00d
 
-static ATOM_SIZET _used_memory = 0;
-static ATOM_SIZET _memory_block = 0;
+static ATOM_SIZET _used_memory = 0;//记录申请了多少内存
+static ATOM_SIZET _memory_block = 0;//记录申请了多少次内存
 
 struct mem_data {
-	uint32_t handle;
-	ssize_t allocated;
+	uint32_t handle;//记录线程id
+	ssize_t allocated;//记录当前线程申请了多少内存
 };
 
 struct mem_cookie {
-	uint32_t handle;
+	uint32_t handle;//记录线程id
 #ifdef MEMORY_CHECK
 	uint32_t dogtag;
 #endif
 };
 
-#define SLOT_SIZE 0x10000
+#define SLOT_SIZE 0x10000//最大线程数
 #define PREFIX_SIZE sizeof(struct mem_cookie)
 
 static struct mem_data mem_stats[SLOT_SIZE];
@@ -44,6 +44,12 @@ static struct mem_data mem_stats[SLOT_SIZE];
 #define raw_realloc je_realloc
 #define raw_free je_free
 
+
+/*
+为了防止内存泄漏，所以记录释放和请求。
+陈硕给了一种办法：使用share_ptr和week_ptr可以解决循环引用的问题，但从根本上来说，skynet更绝对。前者偏向开发者，后者是作为框架设计者。
+当然，这里的记录是没意义的记录。
+*/
 static ssize_t*
 get_allocated_field(uint32_t handle) {
 	int h = (int)(handle & (SLOT_SIZE - 1));
@@ -52,27 +58,33 @@ get_allocated_field(uint32_t handle) {
 	ssize_t old_alloc = data->allocated;
 	if(old_handle == 0 || old_alloc <= 0) {
 		// data->allocated may less than zero, because it may not count at start.
+		//初始化一下
 		if(!ATOM_CAS(&data->handle, old_handle, handle)) {
 			return 0;
 		}
 		if (old_alloc < 0) {
-			ATOM_CAS(&data->allocated, old_alloc, 0);
+			ATOM_CAS(&data->allocated, old_alloc, 0);//怎么可以减得小于零呢？
 		}
 	}
-	if(data->handle != handle) {
-		return 0;
+	if(data->handle != handle) {//用handle查的handle却不等于自己
+		return 0;//这里已经出错了。
 	}
 	return &data->allocated;
 }
 
 inline static void
 update_xmalloc_stat_alloc(uint32_t handle, size_t __n) {
-	ATOM_FADD(&_used_memory, __n);
-	ATOM_FINC(&_memory_block);
+	ATOM_FADD(&_used_memory, __n);//记录使用了多少内存？
+	ATOM_FINC(&_memory_block);//使用多少块，记录量和次数
 	ssize_t* allocated = get_allocated_field(handle);
 	if(allocated) {
 		ATOM_FADD(allocated, __n);
 	}
+	else
+	{
+		//错误情况
+	}
+	
 }
 
 inline static void
@@ -83,8 +95,12 @@ update_xmalloc_stat_free(uint32_t handle, size_t __n) {
 	if(allocated) {
 		ATOM_FSUB(allocated, __n);
 	}
+	else
+	{
+		//错误情况
+	}
 }
-
+//添加申请记录
 inline static void*
 fill_prefix(char* ptr) {
 	uint32_t handle = skynet_current_handle();
@@ -98,7 +114,7 @@ fill_prefix(char* ptr) {
 	update_xmalloc_stat_alloc(handle, size);
 	return ptr;
 }
-
+//清除申请记录
 inline static void*
 clean_prefix(char* ptr) {
 	size_t size = je_malloc_usable_size(ptr);
@@ -118,7 +134,7 @@ clean_prefix(char* ptr) {
 	update_xmalloc_stat_free(handle, size);
 	return ptr;
 }
-
+//内存申请失败的错误处理
 static void malloc_oom(size_t size) {
 	fprintf(stderr, "xmalloc: Out of memory trying to allocate %zu bytes\n",
 		size);
@@ -315,7 +331,7 @@ skynet_lalloc(void *ptr, size_t osize, size_t nsize) {
 }
 
 int
-dump_mem_lua(lua_State *L) {
+dump_mem_lua(lua_State *L) {//依赖lua的知识：https://so.csdn.net/so/search?q=Lua%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90&t=blog&u=initphp
 	int i;
 	lua_newtable(L);
 	for(i=0; i<SLOT_SIZE; i++) {
@@ -335,7 +351,7 @@ malloc_current_memory(void) {
 	for(i=0; i<SLOT_SIZE; i++) {
 		struct mem_data* data = &mem_stats[i];
 		if(data->handle == (uint32_t)handle && data->allocated != 0) {
-			return (size_t) data->allocated;
+			return (size_t) data->allocated;//查找某个线程的缓存，这里可以用红黑树来做。
 		}
 	}
 	return 0;

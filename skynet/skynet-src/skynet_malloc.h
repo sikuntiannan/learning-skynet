@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+//替换c的一套内存管理。
 #define skynet_malloc malloc
 #define skynet_calloc calloc
 #define skynet_realloc realloc
